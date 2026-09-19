@@ -1,0 +1,123 @@
+:root {
+  color: #e8eef7;
+  background:
+    radial-gradient(circle at top, rgba(32, 76, 128, 0.35), transparent 32%),
+    linear-gradient(180deg, #08111d 0%, #0d1828 48%, #050a11 100%);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+}
+
+.hud {
+  position: relative;
+  z-index: 1;
+  padding: 32px 24px;
+  background: rgba(4, 8, 16, 0.68);
+  backdrop-filter: blur(14px);
+  border-right: 1px solid rgba(183, 213, 255, 0.12);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  color: #8cc8ff;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  line-height: 0.98;
+}
+
+.lede {
+  margin: 18px 0 0;
+  max-width: 24ch;
+  color: rgba(232, 238, 247, 0.8);
+}
+
+.legend {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0 0;
+  display: grid;
+  gap: 12px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.control-plane {
+  background: #e85d3f;
+}
+
+.node {
+  background: #4aa3a2;
+}
+
+.pod {
+  background: #f3c969;
+}
+
+.viewport {
+  position: relative;
+  min-height: 100vh;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .hud {
+    border-right: 0;
+    border-bottom: 1px solid rgba(183, 213, 255, 0.12);
+  }
+
+  .lede {
+    max-width: none;
+  }
+
+  .viewport {
+    min-height: 60vh;
+  }
+}
