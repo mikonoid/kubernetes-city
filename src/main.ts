@@ -580,7 +580,8 @@ app.innerHTML = `
 /*  Engine                                                             */
 /* ================================================================== */
 
-const sceneEl   = document.querySelector<SVGSVGElement>('#scene')!;
+const shellEl   = document.querySelector<HTMLDivElement>(".shell")!;
+const sceneEl   = document.querySelector<SVGSVGElement>("#scene")!;
 const stepTitle = document.querySelector<HTMLElement>('#step-title')!;
 const stepDesc  = document.querySelector<HTMLElement>('#step-desc')!;
 const stepList  = document.querySelector<HTMLElement>('#step-list')!;
@@ -596,9 +597,10 @@ const menuClose = document.querySelector<HTMLButtonElement>('#menu-close')!;
 
 let packetG: SVGGElement;
 let scenario: Scenario = SCENARIOS[0];
+let hasActiveScenario = false;
 let stepIndex = 0;
 let stepStart = performance.now();
-let paused = false;
+let paused = true;
 let pauseAt = 0;
 
 const LEGENDS: Record<StageKind, { cls: string; label: string }[]> = {
@@ -691,25 +693,48 @@ function renderStepList() {
     .join('');
 }
 
+function setLandingState() {
+  hasActiveScenario = false;
+  paused = true;
+  btnPlay.disabled = true;
+  btnReset.disabled = true;
+  btnPlay.textContent = 'Pause';
+  brandTag.textContent = 'Choose a scenario';
+  storyCat.textContent = 'Start here';
+  storyName.textContent = 'Scenario selector';
+  stepTitle.textContent = 'Choose a scenario';
+  stepDesc.textContent = 'Pick any scenario from the catalog to render its Kubernetes flow in the browser.';
+  stepList.innerHTML = '';
+  legendEl.innerHTML = '';
+  shellEl.classList.add('landing');
+  renderStage('control');
+  openMenu();
+}
+
 function loadScenario(id: string) {
   const found = SCENARIOS.find((s) => s.id === id);
   if (!found) return;
   scenario = found;
+  hasActiveScenario = true;
   stepIndex = 0;
   stepStart = performance.now();
   paused = false;
+  btnPlay.disabled = false;
+  btnReset.disabled = false;
   btnPlay.textContent = 'Pause';
 
   storyCat.textContent = scenario.category;
   storyName.textContent = scenario.title;
   brandTag.textContent = scenario.category;
 
+  shellEl.classList.remove('landing');
   renderStage(scenario.stage);
   renderStepList();
   applyStep();
 }
 
 btnPlay.addEventListener('click', () => {
+  if (!hasActiveScenario) return;
   const now = performance.now();
   if (!paused) {
     paused = true;
@@ -723,13 +748,14 @@ btnPlay.addEventListener('click', () => {
 });
 
 btnReset.addEventListener('click', () => {
+  if (!hasActiveScenario) return;
   stepIndex = 0;
   stepStart = performance.now();
   applyStep();
 });
 
 function openMenu() { menuEl.classList.add('open'); }
-function closeMenu() { menuEl.classList.remove('open'); }
+function closeMenu() { if (!hasActiveScenario) return; menuEl.classList.remove('open'); }
 btnMenu.addEventListener('click', openMenu);
 menuClose.addEventListener('click', closeMenu);
 menuEl.addEventListener('click', (e) => {
@@ -750,6 +776,12 @@ function easeInOut(t: number) {
 }
 
 function tick() {
+  if (!hasActiveScenario) {
+    packetG.style.display = 'none';
+    requestAnimationFrame(tick);
+    return;
+  }
+
   const now = performance.now();
   const step = scenario.steps[stepIndex];
   const elapsed = paused ? pauseAt - stepStart : now - stepStart;
@@ -774,5 +806,5 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
-loadScenario(SCENARIOS[0].id);
+setLandingState();
 tick();

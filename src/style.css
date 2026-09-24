@@ -213,6 +213,20 @@ body { overflow: hidden; }
   100% { r: 10; opacity: 0.35; }
 }
 
+.landing .story,
+.landing .legend {
+  display: none;
+}
+
+.landing #scene {
+  opacity: 0.32;
+  filter: saturate(0.65) blur(0.2px);
+}
+
+.landing .brand-tag {
+  color: #7dd3fc;
+}
+
 /* ================= Story panel ================= */
 
 .story {
