@@ -151,11 +151,26 @@ body { overflow: hidden; }
 }
 
 /* Pulse (any element with a rect) */
-.pulsing rect { animation: pod-pulse 1.6s ease-in-out infinite; }
+.pulsing > rect { animation: pod-pulse 1.6s ease-in-out infinite; }
 @keyframes pod-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50%      { transform: scale(1.08); opacity: 0.82; }
 }
+
+/* Pod colour states */
+.pod.warn > rect  { fill: rgba(251, 191, 36, 0.28); stroke: #fbbf24; stroke-width: 2; }
+.pod.error > rect { fill: rgba(248, 113, 113, 0.24); stroke: #f87171; stroke-width: 2; }
+.pod.ok > rect    { fill: rgba(52, 211, 153, 0.22); stroke: #34d399; stroke-width: 2; }
+.pod.gone { opacity: 0.14; }
+
+/* Pod status badge */
+.pod-badge { opacity: 0; transition: opacity 260ms ease; pointer-events: none; }
+.pod-badge.show { opacity: 1; }
+.badge-bg   { fill: rgba(9, 15, 27, 0.94); stroke: rgba(140, 180, 240, 0.4); stroke-width: 1; }
+.badge-text { fill: #e5edff; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
+.pod-badge.warn  .badge-bg { stroke: #fbbf24; } .pod-badge.warn  .badge-text { fill: #fbbf24; }
+.pod-badge.error .badge-bg { stroke: #f87171; } .pod-badge.error .badge-text { fill: #f87171; }
+.pod-badge.ok    .badge-bg { stroke: #34d399; } .pod-badge.ok    .badge-text { fill: #34d399; }
 
 /* Config mount boxes */
 .mount-box {

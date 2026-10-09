@@ -36,7 +36,11 @@ type StepAction = {
   fail?: string[];                          // data-id (node) -> .failed
   links?: { id: string; state: LinkState }[];
   status?: { id: string; text: string }[]; // data-status text override
+  mark?: { target: string; kind: PodKind }[];        // data-el pod -> colour state
+  badge?: { target: string; text: string; kind?: PodKind }[]; // label above a pod
 };
+
+type PodKind = 'warn' | 'error' | 'ok' | 'gone';
 
 type StageKind = 'control' | 'service' | 'netpol' | 'config';
 
@@ -101,14 +105,22 @@ function podTile(opts: { id?: string; el?: string; ghost?: boolean; cx: number; 
   const color = opts.color ?? '#fbbf24';
   const cls = ['pod', opts.ghost ? 'ghost' : ''].filter(Boolean).join(' ');
   const attrs = [opts.id ? `data-id="${opts.id}"` : '', opts.el ? `data-el="${opts.el}"` : ''].join(' ');
+  const key = opts.el ?? opts.id;
   const label = opts.label
     ? `<text class="ep-label" x="${opts.cx}" y="${opts.cy + 46}" text-anchor="middle">${opts.label}</text>`
+    : '';
+  const badge = key
+    ? `<g class="pod-badge" data-badge="${key}">
+         <rect class="badge-bg" x="${opts.cx - 66}" y="${opts.cy - 60}" width="132" height="22" rx="11" ry="11"></rect>
+         <text class="badge-text" x="${opts.cx}" y="${opts.cy - 45}" text-anchor="middle"></text>
+       </g>`
     : '';
   return `
     <g class="${cls}" ${attrs}>
       <rect x="${opts.cx - 28}" y="${opts.cy - 28}" width="56" height="56" rx="12" ry="12"></rect>
       <g transform="translate(${opts.cx - 16}, ${opts.cy - 16})">${iconSvg('pod', 32, color)}</g>
       ${label}
+      ${badge}
     </g>`;
 }
 
@@ -170,7 +182,7 @@ function cpNodeBox(n: typeof cpNodes.boxes[number]) {
   const topY = y + h - 116;
 
   const basePods = [0, 1, 2]
-    .map((i) => podTile({ id: `${n.id}-b${i}`, cx: startX + i * colGap, cy: bottomY, color: '#fbbf24' }))
+    .map((i) => podTile({ el: `${n.id}-b${i}`, cx: startX + i * colGap, cy: bottomY, color: '#fbbf24' }))
     .join('');
   const ghostPods = [3, 4, 5]
     .map((i) => podTile({ el: `${n.id}-g${i}`, ghost: true, cx: startX + (i - 3) * colGap, cy: topY, color: '#22d3ee' }))
@@ -491,6 +503,74 @@ const SCENARIOS: Scenario[] = [
       { title: '5. App reads config at runtime', desc: 'The container reads env vars and secret files without a restart on updates.', ms: 2800, highlight: ['apppod'], reveal: ['cfg-mount', 'sec-mount'], pulse: ['cfg-mount', 'sec-mount'] },
     ],
   },
+
+  /* ---- Pod Lifecycle ---- */
+  {
+    id: 'crashloop', title: 'CrashLoopBackOff', category: 'Pod Lifecycle', icon: 'pod', stage: 'control',
+    blurb: 'A container keeps crashing and kubelet backs off restarts.',
+    steps: [
+      { title: '1. Pod scheduled and starting', desc: 'The pod is placed on Node 2 and the container begins to start.', ms: 2400, path: 'p-scheduler-node2', highlight: ['scheduler', 'node2'], badge: [{ target: 'node2-b0', text: 'Starting', kind: 'warn' }] },
+      { title: '2. Container crashes', desc: 'The process exits with a non-zero code shortly after start.', ms: 2400, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'error' }], badge: [{ target: 'node2-b0', text: 'Error', kind: 'error' }], pulse: ['node2-b0'] },
+      { title: '3. Kubelet restarts the container', desc: 'Kubelet restarts the failed container according to the restart policy.', ms: 2400, highlight: ['node2'], badge: [{ target: 'node2-b0', text: 'Restarting', kind: 'warn' }] },
+      { title: '4. It crashes again', desc: 'The container fails once more; the failure count keeps rising.', ms: 2400, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'error' }], badge: [{ target: 'node2-b0', text: 'CrashLoopBackOff', kind: 'error' }], pulse: ['node2-b0'] },
+      { title: '5. Restart back-off grows', desc: 'Kubelet waits longer between restarts (10s, 20s, 40s …) until the crash is fixed.', ms: 3000, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'error' }], badge: [{ target: 'node2-b0', text: 'BackOff 40s', kind: 'error' }] },
+    ],
+  },
+  {
+    id: 'imagepull', title: 'ImagePullBackOff', category: 'Pod Lifecycle', icon: 'pod', stage: 'control',
+    blurb: 'The image cannot be pulled, so the pod never starts.',
+    steps: [
+      { title: '1. Pod scheduled to a node', desc: 'The scheduler binds the pod to Node 2.', ms: 2400, path: 'p-scheduler-node2', highlight: ['scheduler', 'node2'] },
+      { title: '2. Kubelet pulls the image', desc: 'Kubelet asks the container runtime to pull the image from the registry.', ms: 2400, highlight: ['node2'], badge: [{ target: 'node2-b0', text: 'Pulling', kind: 'warn' }] },
+      { title: '3. Pull fails', desc: 'Wrong tag or missing registry credentials — the pull is rejected.', ms: 2400, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'error' }], badge: [{ target: 'node2-b0', text: 'ErrImagePull', kind: 'error' }], pulse: ['node2-b0'] },
+      { title: '4. Retry with back-off', desc: 'Kubelet keeps retrying with increasing delay while the pod stays pending.', ms: 2600, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'error' }], badge: [{ target: 'node2-b0', text: 'ImagePullBackOff', kind: 'error' }] },
+      { title: '5. Fix the image → Running', desc: 'After the tag/credentials are corrected, the image pulls and the pod runs.', ms: 2800, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'ok' }], badge: [{ target: 'node2-b0', text: 'Running', kind: 'ok' }], pulse: ['node2-b0'] },
+    ],
+  },
+  {
+    id: 'initcontainers', title: 'Init Containers', category: 'Pod Lifecycle', icon: 'pod', stage: 'control',
+    blurb: 'Init containers run to completion before the app container starts.',
+    steps: [
+      { title: '1. Pod created', desc: 'The pod defines two init containers before the main app container.', ms: 2400, highlight: ['node2'], badge: [{ target: 'node2-b0', text: 'Init:0/2', kind: 'warn' }] },
+      { title: '2. Init container 1 runs', desc: 'The first init container completes (e.g. waits for a dependency).', ms: 2400, highlight: ['node2'], badge: [{ target: 'node2-b0', text: 'Init:1/2', kind: 'warn' }], pulse: ['node2-b0'] },
+      { title: '3. Init container 2 runs', desc: 'The second init container completes (e.g. runs a DB migration).', ms: 2400, highlight: ['node2'], badge: [{ target: 'node2-b0', text: 'Init:2/2', kind: 'warn' }], pulse: ['node2-b0'] },
+      { title: '4. App container starts', desc: 'With all init containers done, the main container starts.', ms: 2400, highlight: ['node2'], badge: [{ target: 'node2-b0', text: 'Starting', kind: 'warn' }] },
+      { title: '5. Pod Ready', desc: 'Readiness probe passes and the pod joins the Service.', ms: 2800, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'ok' }], badge: [{ target: 'node2-b0', text: 'Running', kind: 'ok' }], pulse: ['node2-b0'] },
+    ],
+  },
+  {
+    id: 'pending', title: 'Pending — Insufficient Resources', category: 'Scheduling', icon: 'pod', stage: 'control',
+    blurb: 'A pod requests more than any node can offer and stays Pending.',
+    steps: [
+      { title: '1. Pod requests 8 CPU', desc: 'A pod is created with a large CPU request.', ms: 2400, path: 'p-api-controller', highlight: ['api', 'controller'] },
+      { title: '2. Scheduler checks every node', desc: 'The scheduler runs filters against all nodes.', ms: 2600, path: 'p-controller-scheduler', highlight: ['scheduler', 'node1', 'node2', 'node3'] },
+      { title: '3. No node has enough CPU', desc: 'Every node fails the resource predicate.', ms: 2600, highlight: ['scheduler'], status: [{ id: 'node1', text: 'Full' }, { id: 'node2', text: 'Full' }, { id: 'node3', text: 'Full' }] },
+      { title: '4. Pod stays Pending', desc: 'With no fitting node, the pod remains unscheduled (Pending).', ms: 2600, highlight: ['scheduler'], status: [{ id: 'node1', text: 'Full' }, { id: 'node2', text: 'Full' }, { id: 'node3', text: 'Full' }] },
+      { title: '5. Free capacity → scheduled', desc: 'After scaling the cluster or lowering the request, the pod is placed and runs.', ms: 2800, path: 'p-scheduler-node2', highlight: ['scheduler', 'node2'], reveal: ['node2-g3'], pulse: ['node2-g3'] },
+    ],
+  },
+  {
+    id: 'drain', title: 'Drain a Node', category: 'Reliability', icon: 'worker-node', stage: 'control',
+    blurb: 'Cordon, evict pods, and reschedule them before maintenance.',
+    steps: [
+      { title: '1. kubectl drain node-2', desc: 'The operator starts draining Node 2 for maintenance.', ms: 2400, path: 'p-user-api', highlight: ['user', 'api'] },
+      { title: '2. Node cordoned', desc: 'Node 2 is marked unschedulable — no new pods will land there.', ms: 2400, highlight: ['node2'], status: [{ id: 'node2', text: 'SchedulingDisabled' }] },
+      { title: '3. Evict running pods', desc: 'Existing pods on Node 2 are gracefully evicted.', ms: 2600, highlight: ['node2'], status: [{ id: 'node2', text: 'SchedulingDisabled' }], mark: [{ target: 'node2-b0', kind: 'warn' }, { target: 'node2-b1', kind: 'warn' }, { target: 'node2-b2', kind: 'warn' }], badge: [{ target: 'node2-b1', text: 'Evicting', kind: 'warn' }] },
+      { title: '4. Reschedule onto healthy nodes', desc: 'The evicted pods are recreated on Node 1 and Node 3.', ms: 2600, path: 'p-scheduler-node1', highlight: ['scheduler', 'node1', 'node3'], status: [{ id: 'node2', text: 'SchedulingDisabled' }], reveal: ['node1-g3', 'node3-g3'], mark: [{ target: 'node2-b0', kind: 'gone' }, { target: 'node2-b1', kind: 'gone' }, { target: 'node2-b2', kind: 'gone' }] },
+      { title: '5. Node drained', desc: 'Node 2 is empty and ready for maintenance; workloads keep running elsewhere.', ms: 2800, highlight: ['node2'], status: [{ id: 'node2', text: 'Drained' }], reveal: ['node1-g3', 'node3-g3'], mark: [{ target: 'node2-b0', kind: 'gone' }, { target: 'node2-b1', kind: 'gone' }, { target: 'node2-b2', kind: 'gone' }], pulse: ['node1-g3', 'node3-g3'] },
+    ],
+  },
+  {
+    id: 'hpa', title: 'HPA Scale Out', category: 'Reliability', icon: 'horizontalpodautoscaler', stage: 'control',
+    blurb: 'The HorizontalPodAutoscaler adds replicas as load rises.',
+    steps: [
+      { title: '1. Load rises, CPU > 80%', desc: 'Traffic increases and the running pod is under heavy CPU load.', ms: 2400, highlight: ['node2'], mark: [{ target: 'node2-b0', kind: 'warn' }], badge: [{ target: 'node2-b0', text: 'CPU 92%', kind: 'warn' }], pulse: ['node2-b0'] },
+      { title: '2. HPA raises the replica count', desc: 'The HPA compares the metric to the target and scales the Deployment up.', ms: 2600, path: 'p-api-controller', highlight: ['api', 'controller'] },
+      { title: '3. New replica on Node 1', desc: 'The controller creates a pod and the scheduler places it on Node 1.', ms: 2400, path: 'p-scheduler-node1', highlight: ['scheduler', 'node1'], reveal: ['node1-g3'], badge: [{ target: 'node2-b0', text: 'CPU 92%', kind: 'warn' }] },
+      { title: '4. New replica on Node 3', desc: 'A second replica is scheduled on Node 3.', ms: 2400, path: 'p-scheduler-node3', highlight: ['scheduler', 'node3'], reveal: ['node1-g3', 'node3-g3'] },
+      { title: '5. Load spread, CPU back to normal', desc: 'With more replicas the average CPU drops below target and scaling settles.', ms: 2800, highlight: ['controller'], reveal: ['node1-g3', 'node3-g3'], mark: [{ target: 'node2-b0', kind: 'ok' }], badge: [{ target: 'node2-b0', text: 'CPU 45%', kind: 'ok' }], pulse: ['node1-g3', 'node3-g3'] },
+    ],
+  },
 ];
 
 const STAGE_BUILDERS: Record<StageKind, () => string> = {
@@ -675,6 +755,25 @@ function applyStep() {
   for (let i = 0; i <= stepIndex; i++) for (const r of scenario.steps[i].reveal ?? []) revealed.add(r);
   revealed.forEach((el) => sceneEl.querySelector(`[data-el="${el}"]`)?.classList.add('visible'));
   for (const el of step.pulse ?? []) sceneEl.querySelector(`[data-el="${el}"]`)?.classList.add('pulsing');
+
+  /* pod marks (colour states) */
+  sceneEl.querySelectorAll<SVGGElement>('.pod').forEach((p) => p.classList.remove('warn', 'error', 'ok', 'gone'));
+  for (const m of step.mark ?? []) sceneEl.querySelector(`[data-el="${m.target}"]`)?.classList.add(m.kind);
+
+  /* badges above pods */
+  sceneEl.querySelectorAll<SVGGElement>('.pod-badge').forEach((b) => {
+    b.classList.remove('show', 'warn', 'error', 'ok', 'gone');
+    const t = b.querySelector<SVGTextElement>('.badge-text');
+    if (t) t.textContent = '';
+  });
+  for (const b of step.badge ?? []) {
+    const g = sceneEl.querySelector<SVGGElement>(`[data-badge="${b.target}"]`);
+    if (!g) continue;
+    g.classList.add('show');
+    if (b.kind) g.classList.add(b.kind);
+    const t = g.querySelector<SVGTextElement>('.badge-text');
+    if (t) t.textContent = b.text;
+  }
 
   /* links */
   sceneEl.querySelectorAll<SVGPathElement>('.link').forEach((l) => l.classList.remove('active', 'allow', 'deny'));
